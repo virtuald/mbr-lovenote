@@ -22,44 +22,43 @@ BITS 16
 org 0h 
 
 
-start:           			;Ok, dont change this stuff either..                
+start:           					;Ok, dont change this stuff either..                
+	
+	jmp short load_prog	
+	
+	ident   db "ONETOLVE"				
+	
+load_prog:
+
+	cld
 	xor ax,ax
 	mov ss,ax
-	mov sp,7c00h
-	sti
-	jmp short load_prog		
-
-ident   db "ONETOLVE"				
-					;note: this code won't work if you don't have more
-					;than 32k of memory.. lol, such a big problem	
-load_prog:
-    
-	cld
+	mov sp,7c00h					; setup stack
 		
-	mov ax,0800h
-	mov es,ax						; initialize es w/ 0800h
-	mov ds,ax						; initialize ds w/ 0800h
+	mov ax,8000h
+	mov es,ax						; initialize es w/ 8000h
+	mov ds,ax						; initialize ds w/ 8000h
+	
 	
 ;
-;	Load 6 sectors at 0800:0000
+;	Load 6 sectors at es:0000
 ;
 
 load_1:
 	mov ax,0206h                    ;function/# of sec to read
-	mov cx,0000h                    ;0-5 sec #, 6-7 hi cyl bits
+	mov cx,0001h                    ;0-5 sec # (counts from one), 6-7 hi cyl bits
 	mov dx,0080h                    ;dh=head dl=drive (bit 7=hdd)
 	mov bx,0h                       ;data buffer, points to es:0
 	int 13h
 	cmp ah,0
 	jne load_1                      ;this is allowable because it is
 									;relative
-									
+	
 ;
-;	Jump to code at 0800:prog_continue
+;	Jump to code at es:prog_continue
 ;
-
-	mov ax,0800h
-	push ax
+	
+	push es
 	mov ax,prog_continue
 	push ax
 	retf
@@ -68,66 +67,68 @@ load_1:
 	
 prog_continue:
 	
-;
-;	Display the message located at 0800:0400
-;
-	
 	mov ax,3
-	int 10h			; clear screen
+	int 10h							; clear screen
 	
-	; get length of string
+;
+;	Display the null terminated message located at 0800:0400
+;
+
 	
 	mov bp,0400h
+	mov ah,0eh
 	mov si,0ffffh
-calc_loop:
+	
+write_char:
 	inc si
-	cmp byte [bp + si],0	; try to find the null
-	jnz calc_loop
+	cmp byte [ds:bp + si],0			; keep writing until there is a null byte 
+	jz wait_for_key
+
+	push bp
 	
-	mov cx,si				; transfer si to the count register
+	mov al, [byte ds:bp + si]
+	mov bx, 07h
+	int 10h							; teletype the character
 	
-	mov ax,1301h			; write line
-	mov bx,07h				; attribute
-	mov dx,0				; location
-	int 10h	
+	pop bp
+	
+	jmp write_char
 	
 ;
 ;	Wait for key
 ;
-
+wait_for_key:
 	mov ah,0
 	int 16h
 
 ;
-;	Copy 512 bytes from 0800:0200 to 0000:7c00
-;	Jump to 0000:7c00
+;	Copy 512 bytes from ds:0200 to 0000:7c00
+;	Jump to 0000:7c00h
 ;
 
-	mov cx,0200h		; 512 bytes
-	mov ax,0800h
-	mov ds,ax			; src segment
-	mov si,0200h		; src location
+	mov cx,0200h					; 512 bytes
+	mov si,0200h					; src location
 	xor ax,ax
-	mov es,ax			; dest segment
-	mov di,7c00h		; dest addr
-	rep movsb			; move 512 bytes
-
+	mov es,ax						; dest segment
+	mov di,7c00h					; dest addr
+	rep movsb						; move 512 bytes
+	
 ;
 ;	And we're done... jump to the real boot sector
 ;
-
-	mov ax,7c00h
-	push ax
+	mov dx,0080h					;BIOS function
 	xor ax,ax
+	push ax
+	mov ax,7c00h
 	push ax
 	retf
 
 
 times 1beh-($-$$) db 0
 	;ok.. a fake partition table. Who cares.
-	db 80h                 ;active
+	db 80h                			 ;active
 	db 0,0,0
-	db 55h                 ;fake
+	db 55h                			 ;fake
 	times 59 db 0            
 MBR_signature:
 	db 55h,0aah
